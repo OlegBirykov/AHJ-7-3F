@@ -1,3 +1,5 @@
+import { url, runRequest } from './request';
+
 export default class ImageManager {
   constructor(formContainer, imageContainer) {
     this.formContainer = formContainer;
@@ -29,11 +31,11 @@ export default class ImageManager {
     return `[data-id=${this.ctrlId.image}]`;
   }
 
-  bindToDOM() {
+  async bindToDOM() {
     this.formContainer.innerHTML = `
       <form data-widget="${this.constructor.ctrlId.form}">
         <label>Drag and Drop files here or Click to select</label>
-        <input type="file" data-id="${this.constructor.ctrlId.file}" multiple>
+        <input type="file" name="file" data-id="${this.constructor.ctrlId.file}" multiple>
       </form>  
     `;
     this.form = this.formContainer.querySelector(this.constructor.formSelector);
@@ -45,43 +47,109 @@ export default class ImageManager {
     `;
     this.container = this.imageContainer.querySelector(this.constructor.containerSelector);
 
+    await this.loadImages();
+
     this.form.addEventListener('click', () => {
       this.fileInput.dispatchEvent(new MouseEvent('click'));
     });
 
-    this.fileInput.addEventListener('change', (event) => this.addImage(Array.from(event.target.files)));
+    this.fileInput.addEventListener('change', (event) => this.addImages(event.target.files));
 
     this.form.addEventListener('dragover', (event) => event.preventDefault());
 
     this.form.addEventListener('drop', (event) => {
       event.preventDefault();
-      this.addImage(Array.from(event.dataTransfer.files));
+      this.addImages(event.dataTransfer.files);
     });
   }
 
-  addImage(files) {
-    if (!files) {
-      return;
+  async loadImages() {
+    let images;
+
+    const params = {
+      data: {
+        method: 'allImages',
+      },
+      responseType: 'json',
+      method: 'GET',
+    };
+
+    try {
+      images = await runRequest(params);
+    } catch (error) {
+      alert(error);
+      throw (error);
     }
-    files.forEach((file) => {
+
+    this.redraw(images);
+  }
+
+  redraw(images) {
+    this.container.innerHTML = '';
+    images.forEach(({ id, name }) => {
       const imageEl = document.createElement('div');
       imageEl.dataset.id = this.constructor.ctrlId.image;
       imageEl.innerHTML = `
         <img src="" alt="нет картинки" height="100">
-        <p>&#x274C;</p>
+        <p data-id="${id}">&#x274C;</p>
       `;
 
       const image = imageEl.querySelector('img');
-      image.src = URL.createObjectURL(file);
+      image.src = `${url}\\${name}`;
 
       this.container.appendChild(imageEl);
 
       image.addEventListener('load', () => {
-        URL.revokeObjectURL(image.src);
-        imageEl.querySelector('p').addEventListener('click', () => imageEl.remove());
+        imageEl.querySelector('p').addEventListener('click', () => this.deleteImage(id));
       });
 
-      image.addEventListener('error', () => imageEl.remove());
+      image.addEventListener('error', () => this.deleteImage(id));
     });
+  }
+
+  async addImages(files) {
+    let images;
+
+    const data = { method: 'addImages' };
+    files.forEach((file, i) => {
+      data[`f${i}`] = file;
+    });
+
+    const params = {
+      data,
+      responseType: 'json',
+      method: 'POST',
+    };
+
+    try {
+      images = await runRequest(params);
+    } catch (error) {
+      alert(error);
+      throw (error);
+    }
+
+    this.redraw(images);
+  }
+
+  async deleteImage(id) {
+    let images;
+
+    const params = {
+      data: {
+        method: 'deleteImage',
+        id,
+      },
+      responseType: 'json',
+      method: 'POST',
+    };
+
+    try {
+      images = await runRequest(params);
+    } catch (error) {
+      alert(error);
+      throw (error);
+    }
+
+    this.redraw(images);
   }
 }
